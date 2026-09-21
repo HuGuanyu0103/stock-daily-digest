@@ -1,0 +1,42 @@
+sequenceDiagram
+    participant U as 用户
+    participant FE as 前端<br/>(标的详情页)
+    participant SYS as 规则/系统层<br/>(拉取·判定·校验)
+    participant LLM as 大模型层<br/>(白话翻译)
+    participant SRC as 数据源/人工<br/>(信源·人审)
+
+    Note over SYS,SRC: 【后台数据处理】用户无感·持续运行
+    SRC->>SYS: 持续推送新数据(行情/公告/快讯/资金,带时间+来源)
+    SYS->>SYS: 拉取入库保鲜(不解读)
+
+    SYS->>SYS: 判定triage:结构化信号+阈值(非LLM)
+    alt 未过阈值(非重大)
+        SYS-->>SYS: 仅入库,等收盘每日兜底
+    else 判定重大
+        SYS->>SYS: 组织上下文(打事实/判断标·时间窗去噪·动态组装)
+        SYS->>LLM: 喂上下文(数值已算好,禁改写)
+        LLM->>LLM: 生成白话解读:一句话结论+三维归因+隐藏信号
+        LLM-->>SYS: 返回解读(事实直陈/观点标来源)
+    end
+
+    Note over SYS,SRC: 【合规硬闸 + 人在回路】放行前必经
+    SYS->>SYS: 校验:溯源+数值一致性+合规黑名单
+    opt 校验不过
+        SYS->>LLM: 带反馈重写一次
+        LLM-->>SYS: 修正后重校验
+    end
+    SYS->>SYS: 风险分级路由(低放行/中抽检/高必审)
+    alt 高风险(重大利空/方向翻转)
+        SYS->>SRC: 转人工复核
+        SRC-->>SYS: 未过则降级:只展示客观事实+公告原文
+    end
+    SYS->>SYS: 版本判定:方向性变化打「已更新」标记(规则判定)
+    LLM-->>SYS: 仅生成变化点人话文案
+
+    Note over U,FE: 【前台呈现与反馈】
+    SYS->>FE: 下发解读(附更新时间戳)
+    FE->>U: 详情页常驻「今日解读」卡片
+    U->>U: 读结论→展开三维归因→点出处溯源(不跳出核对)
+    U->>SYS: 「有用/没用」投票·举报疑似荐股
+    SYS->>SRC: 负反馈聚集→触发人审/下线
+    SRC-->>SYS: 错误回流为新规则/黑名单/评测集
